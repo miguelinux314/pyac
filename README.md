@@ -9,6 +9,10 @@ Have a lot of fun!
 
 -- Miguel Hernández-Cabronero https://deic.uab.cat/~mhernandez
 
+## Dependencies
+
+`pip install bitarray`
+
 ## Contents
 
 * pyac.py: main library module. Includes the ArithmeticEncoder, ArithmeticDecoder and ProbabilityTable classes. 
