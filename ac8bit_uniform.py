@@ -33,11 +33,8 @@ def main():
         ae.finish()
 
     if options.action in ("d", "decompress"):
-        with open(options.input_path, "rb") as f_compressed, \
-                open(options.output_path, "wb") as f_reconstructed:
-            bitin = bitarray()
-            bitin.fromfile(f_compressed)
-            ad = ArithmeticDecoder(bitin=bitin,
+        with open(options.output_path, "wb") as f_reconstructed:
+            ad = ArithmeticDecoder(input_path=options.input_path,
                                    symbol_count=257,
                                    initial_probabilities=uniform_probabilities)
 

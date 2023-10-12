@@ -13,6 +13,7 @@ __date__ = "11/10/2023"
 
 from typing import List
 from bitarray import bitarray
+import mmap
 
 
 class ProbabilityTable:
@@ -275,12 +276,12 @@ class ArithmeticEncoder(ArithmeticBase):
 class ArithmeticDecoder(ArithmeticBase):
     def __init__(
             self,
-            bitin: bitarray,
+            input_path: str,
             symbol_count: int,
             initial_probabilities: List[float],
             bit_precision: int = 32):
         """
-        :param bitin:
+        :param input_path: path to the file with the compressed data.
         :param symbol_count: number of possible symbols. All symbols to be coded
           have to be 0 <= s <= symbol_count - 1, and all decoded symbols will be
           in the same range.
@@ -293,12 +294,17 @@ class ArithmeticDecoder(ArithmeticBase):
         super().__init__(symbol_count=symbol_count,
                          initial_probabilities=initial_probabilities,
                          bit_precision=bit_precision)
-        self.bitin = bitin
+        # Access and track input
+        self.input_path = input_path
+        self.input_file = open(input_path, "rb")
+        self.input_map = mmap.mmap(self.input_file.fileno(), 0, access=mmap.ACCESS_READ)
+        self.bitin = bitarray(buffer=self.input_map)
+        self.bits_consumed = 0
 
         # Read the first bits of code
         self.code = 0
         for _ in range(self.interval_bit_precision):
-            self.code = (self.code << 1) | self.bitin.pop(0)
+            self.code = (self.code << 1) | self.get_next_bit()
 
         # Constants specific to the decoder
         self.ones_except_msb = self.all_ones >> 1
@@ -351,6 +357,8 @@ class ArithmeticDecoder(ArithmeticBase):
         """Read and return the next input bit from file, or return 0 when the EOF is found.
         """
         try:
-            return self.bitin.pop(0)
+            current_index = self.bits_consumed
+            self.bits_consumed += 1
+            return self.bitin[current_index]
         except IndexError:
             return 0
