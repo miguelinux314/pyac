@@ -81,22 +81,34 @@ class ArithmeticBase:
 
     def __init__(
             self,
+            symbol_count: int,
+            initial_probabilities: List[float],
             bit_precision: int):
         """
+        :param symbol_count: number of possible symbols. All symbols to be coded
+          have to be 0 <= s <= symbol_count - 1, and all decoded symbols will be
+          in the same range.
+        :param initial_probabilities: initial probabilities to be used for coding.
         :param bit_precision: Bit precision for the interval
           extrema [low, high). It corresponds to N+P in [3],
           and N is fixed to 2 in this implementation.
+          `bit_precision = 32` tends to be an adequate choice.
         """
         # Precision constants
         self.interval_bit_precision = bit_precision
         if bit_precision <= 8:
             raise ValueError(f"Invalid {bit_precision=} <= 8")
-        self.msb_to_lsb_shift = bit_precision - 1
 
         # Bit masks used during the update process
         self.first_msb = 1 << (self.interval_bit_precision - 1)
         self.second_msb = 1 << (self.interval_bit_precision - 2)
         self.all_ones = (1 << self.interval_bit_precision) - 1
+
+        # Establish probability table
+        self.symbol_count = symbol_count
+        if self.symbol_count < 2:
+            raise ValueError(f"At least 2 symbols are needed, but {self.symbol_count} were given")
+        self.update_probabilities(initial_probabilities)
 
         # Probability range, scaled by 2^bit_precision.
         # Following [2], A_n = self.high - self.low + 1.
@@ -110,12 +122,21 @@ class ArithmeticBase:
         (floating point) probability masses and the selected
         interval bit depth.
         """
-        return ProbabilityTable(
+
+    def update_probabilities(self, probabilities: List[float]):
+        """Update the probability table to be used for all following symbols
+        (or until updated again).
+        :param probabilities: list of exactly self.symbol_count elements, with sum close to 1.
+        """
+        if len(probabilities) != self.symbol_count:
+            raise ValueError(f"Expected a list with {self.symbol_count} elements, "
+                             f"received one with {len(probabilities)}")
+        self.probability_table = ProbabilityTable(
             probabilities=probabilities,
             bit_precision=self.interval_bit_precision - 3)
 
-    def update_interval(self, symbol: int, probability_table: ProbabilityTable):
-        """Update the probability interval given the next symbol (in 0,...,S-1,
+    def update_interval(self, symbol: int):
+        """Update the probability interval given the next symbol (in 0,...,S-1),
         where S is the number of symbols) and the table of probabilities.
         """
         # Update the probability interval
@@ -126,12 +147,12 @@ class ArithmeticBase:
             # Note that a_n is approximated by floor((hi-lo+1)/2^P),
             # where P is the probability precision
             self.low +
-            ((probability_table.i_cumulative_probabilities[symbol] * range_length)
-             >> probability_table.bit_precision),
+            ((self.probability_table.i_cumulative_probabilities[symbol] * range_length)
+             >> self.probability_table.bit_precision),
 
             self.low +
-            ((probability_table.i_cumulative_probabilities[symbol + 1] * range_length)
-             >> probability_table.bit_precision) - 1)
+            ((self.probability_table.i_cumulative_probabilities[symbol + 1] * range_length)
+             >> self.probability_table.bit_precision) - 1)
 
         # When both the low and high ends of the interval
         # Share their MSB, it's time for renormalization.
@@ -181,31 +202,44 @@ class ArithmeticBase:
 
 
 class ArithmeticEncoder(ArithmeticBase):
-    def __init__(self, output_path: str, bit_precision: int = 32):
+    def __init__(
+            self,
+            output_path: str,
+            symbol_count: int,
+            initial_probabilities: List[float],
+            bit_precision: int = 32):
         """
-        :param output_path: Path where the compressed data are stored
+        :param output_path: Path where the compressed data are stored.
+        :param symbol_count: number of possible symbols. All symbols to be coded
+          have to be 0 <= s <= symbol_count - 1, and all decoded symbols will be
+          in the same range.
+        :param initial_probabilities: initial probabilities to be used for coding.
         :param bit_precision: number of bits used to store the scaled
            interval ranges. Warning: values too small will result
            in efficiency losses, and values too large in computational
            overhead.
         """
-        super().__init__(bit_precision=bit_precision)
+        initial_probabilities = initial_probabilities if initial_probabilities is not None \
+            else [1] * symbol_count
+        super().__init__(symbol_count=symbol_count,
+                         initial_probabilities=initial_probabilities,
+                         bit_precision=bit_precision)
         self.carry_count = 0
         self.output_path = output_path
         self.output_file = open(self.output_path, "wb")
         self.bitout = bitarray()
+
+        # Constant used only during the encoding process
+        self.msb_to_lsb_shift = bit_precision - 1
+
         # Simple aliasing for more inteligible calls
         self.code_symbol = self.update_interval
 
-    def code_symbol(
-            self,
-            symbol: int,
-            probabilities: ProbabilityTable) -> None:
+    def code_symbol(self, symbol: int) -> None:
         """Code the next symbol s in {0, 1, ..., S-1}
         using the provided probability table for S symbols.
+        Call self.update_probabilities before code_symbol if needed.
         :param symbol: symbol to be encoded
-        :param probabilities: table of probabilities of the different
-          symbols
         """
         raise RuntimeError("This should have been substituted "
                            "with self.update_range in __init__")
@@ -239,8 +273,26 @@ class ArithmeticEncoder(ArithmeticBase):
 
 
 class ArithmeticDecoder(ArithmeticBase):
-    def __init__(self, bitin: bitarray, bit_precision: int = 32):
-        super().__init__(bit_precision=bit_precision)
+    def __init__(
+            self,
+            bitin: bitarray,
+            symbol_count: int,
+            initial_probabilities: List[float],
+            bit_precision: int = 32):
+        """
+        :param bitin:
+        :param symbol_count: number of possible symbols. All symbols to be coded
+          have to be 0 <= s <= symbol_count - 1, and all decoded symbols will be
+          in the same range.
+        :param initial_probabilities: initial probabilities to be used for coding.
+        :param bit_precision: number of bits used to store the scaled
+           interval ranges. Warning: values too small will result
+           in efficiency losses, and values too large in computational
+           overhead.
+        """
+        super().__init__(symbol_count=symbol_count,
+                         initial_probabilities=initial_probabilities,
+                         bit_precision=bit_precision)
         self.bitin = bitin
 
         # Read the first bits of code
@@ -251,31 +303,34 @@ class ArithmeticDecoder(ArithmeticBase):
         # Constants specific to the decoder
         self.ones_except_msb = self.all_ones >> 1
 
-    def decode_symbol(self, probability_table: ProbabilityTable) -> int:
+    def decode_symbol(self) -> int:
+        """Decode the next symbol encoded in the input file, with the current probability
+        tables. These must be updated to the same values as the encoder.
+        """
         # Calculate the approximate probability of the next symbol
         # based on the current range and the current code (decoded bits)
         range_length = self.high - self.low + 1
         offset = self.code - self.low
-        next_symbol_prob = ((offset + 1) * probability_table.max_val - 1) // range_length
+        next_symbol_prob = ((offset + 1) * self.probability_table.max_val - 1) // range_length
 
         # Find the largest symbol whose cumulative distribution is lower than
         # the approximate symbol probability.
         # NOTE: This is a simple linear search with complexity O(N), it can be
         # improved with a binary search algorithm O(log N)
         next_symbol = 1
-        while next_symbol < probability_table.symbol_count:
+        while next_symbol < self.probability_table.symbol_count:
             # probability_table.f_cumulative_probabilities[next_symbol] <= next_symbol_prob:
-            if probability_table.i_cumulative_probabilities[next_symbol] > next_symbol_prob:
+            if self.probability_table.i_cumulative_probabilities[next_symbol] > next_symbol_prob:
                 next_symbol -= 1
                 break
             next_symbol += 1
         else:
-            next_symbol = probability_table.symbol_count - 1
-        assert 0 <= next_symbol < probability_table.symbol_count
+            next_symbol = self.probability_table.symbol_count - 1
+        assert 0 <= next_symbol < self.probability_table.symbol_count
 
-        if next_symbol < probability_table.symbol_count - 1:
+        if next_symbol < self.probability_table.symbol_count - 1:
             # Update the interval based on the decoded symbol
-            self.update_interval(symbol=next_symbol, probability_table=probability_table)
+            self.update_interval(symbol=next_symbol)
 
         return next_symbol
 
