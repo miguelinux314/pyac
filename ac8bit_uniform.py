@@ -24,7 +24,7 @@ def main():
 
     if options.action in ("c", "compress"):
         ae = ArithmeticEncoder(output_path=options.output_path,
-                               symbol_count=257,
+                               symbol_count=len(uniform_probabilities),
                                initial_probabilities=uniform_probabilities)
         for i, symbol in enumerate(open(options.input_path, "rb").read()):
             ae.code_symbol(symbol=symbol)
@@ -35,7 +35,7 @@ def main():
     if options.action in ("d", "decompress"):
         with open(options.output_path, "wb") as f_reconstructed:
             ad = ArithmeticDecoder(input_path=options.input_path,
-                                   symbol_count=257,
+                                   symbol_count=len(uniform_probabilities),
                                    initial_probabilities=uniform_probabilities)
 
             while True:
