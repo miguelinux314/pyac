@@ -82,14 +82,12 @@ class ArithmeticBase:
 
     def __init__(
             self,
-            symbol_count: int,
             initial_probabilities: List[float],
             bit_precision: int):
         """
-        :param symbol_count: number of possible symbols. All symbols to be coded
-          have to be 0 <= s <= symbol_count - 1, and all decoded symbols will be
-          in the same range.
         :param initial_probabilities: initial probabilities to be used for coding.
+          It must be a list of S >= 2 floats, corresponding to the probabilities
+          of symbols 0, 1, ... S-1.
         :param bit_precision: Bit precision for the interval
           extrema [low, high). It corresponds to N+P in [3],
           and N is fixed to 2 in this implementation.
@@ -106,9 +104,6 @@ class ArithmeticBase:
         self.all_ones = (1 << self.interval_bit_precision) - 1
 
         # Establish probability table
-        self.symbol_count = symbol_count
-        if self.symbol_count < 2:
-            raise ValueError(f"At least 2 symbols are needed, but {self.symbol_count} were given")
         self.update_probabilities(initial_probabilities)
 
         # Probability range, scaled by 2^bit_precision.
@@ -127,11 +122,12 @@ class ArithmeticBase:
     def update_probabilities(self, probabilities: List[float]):
         """Update the probability table to be used for all following symbols
         (or until updated again).
-        :param probabilities: list of exactly self.symbol_count elements, with sum close to 1.
+        :param probabilities: list of symbol probabilities to be used for the next
+          symbols (until updated again). The sum must be close to 1.
         """
-        if len(probabilities) != self.symbol_count:
-            raise ValueError(f"Expected a list with {self.symbol_count} elements, "
-                             f"received one with {len(probabilities)}")
+        if len(probabilities) < 2:
+            raise ValueError(f"Probabilities for at least 2 symbols are needed, "
+                             f"found {len(probabilities)} instead")
         self.probability_table = ProbabilityTable(
             probabilities=probabilities,
             bit_precision=self.interval_bit_precision - 3)
@@ -206,24 +202,19 @@ class ArithmeticEncoder(ArithmeticBase):
     def __init__(
             self,
             output_path: str,
-            symbol_count: int,
             initial_probabilities: List[float],
             bit_precision: int = 32):
         """
         :param output_path: Path where the compressed data are stored.
-        :param symbol_count: number of possible symbols. All symbols to be coded
-          have to be 0 <= s <= symbol_count - 1, and all decoded symbols will be
-          in the same range.
         :param initial_probabilities: initial probabilities to be used for coding.
+          It must be a list of S >= 2 floats, corresponding to the probabilities
+          of symbols 0, 1, ... S-1.
         :param bit_precision: number of bits used to store the scaled
            interval ranges. Warning: values too small will result
            in efficiency losses, and values too large in computational
            overhead.
         """
-        initial_probabilities = initial_probabilities if initial_probabilities is not None \
-            else [1] * symbol_count
-        super().__init__(symbol_count=symbol_count,
-                         initial_probabilities=initial_probabilities,
+        super().__init__(initial_probabilities=initial_probabilities,
                          bit_precision=bit_precision)
         self.carry_count = 0
         self.output_path = output_path
@@ -277,22 +268,19 @@ class ArithmeticDecoder(ArithmeticBase):
     def __init__(
             self,
             input_path: str,
-            symbol_count: int,
             initial_probabilities: List[float],
             bit_precision: int = 32):
         """
         :param input_path: path to the file with the compressed data.
-        :param symbol_count: number of possible symbols. All symbols to be coded
-          have to be 0 <= s <= symbol_count - 1, and all decoded symbols will be
-          in the same range.
         :param initial_probabilities: initial probabilities to be used for coding.
+          It must be a list of S >= 2 floats, corresponding to the probabilities
+          of symbols 0, 1, ... S-1.
         :param bit_precision: number of bits used to store the scaled
            interval ranges. Warning: values too small will result
            in efficiency losses, and values too large in computational
            overhead.
         """
-        super().__init__(symbol_count=symbol_count,
-                         initial_probabilities=initial_probabilities,
+        super().__init__(initial_probabilities=initial_probabilities,
                          bit_precision=bit_precision)
         # Access and track input
         self.input_path = input_path
