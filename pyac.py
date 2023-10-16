@@ -255,8 +255,11 @@ class ArithmeticEncoder(ArithmeticBase):
         if self.bitout is None:
             # Finish has been called more than once, ignore
             return
-        # Write a last 1 to allow proper decoding
+        # Write a last 1 and pad with zeros to allow proper decoding
         self.bitout.append(1)
+        while len(self.bitout) % 8 != 0:
+            self.bitout.append(0)
+
         # Flush bits to file and close everything
         self.bitout.tofile(self.output_file)
         self.output_file.close()
@@ -311,7 +314,7 @@ class ArithmeticDecoder(ArithmeticBase):
         # the approximate symbol probability.
         # NOTE: This is a simple linear search with complexity O(N), it can be
         # improved with a binary search algorithm O(log N)
-        next_symbol = 1
+        next_symbol = 0
         while next_symbol < self.probability_table.symbol_count:
             # probability_table.f_cumulative_probabilities[next_symbol] <= next_symbol_prob:
             if self.probability_table.i_cumulative_probabilities[next_symbol] > next_symbol_prob:
@@ -322,9 +325,8 @@ class ArithmeticDecoder(ArithmeticBase):
             next_symbol = self.probability_table.symbol_count - 1
         assert 0 <= next_symbol < self.probability_table.symbol_count
 
-        if next_symbol < self.probability_table.symbol_count - 1:
-            # Update the interval based on the decoded symbol
-            self.update_interval(symbol=next_symbol)
+        # Update the interval based on the decoded symbol
+        self.update_interval(symbol=next_symbol)
 
         return next_symbol
 
