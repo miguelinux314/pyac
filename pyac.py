@@ -46,8 +46,8 @@ class ProbabilityTable:
         self.f_probabilities = probabilities
         float_probability_error = abs(1 - sum(self.f_probabilities))
         if float_probability_error > tolerance:
-            raise ValueError(f"Probability sum error ({fpe}) exceeds "
-                             f"the tolerance ({tolerance})")
+            raise ValueError(f"Probability sum error ({float_probability_error}) differs from 1 "
+                             f"more than the allowed tolerance ({tolerance})")
 
         # Floating-point cumulative probabily masses F(s)
         cumulative_distribution = 0
