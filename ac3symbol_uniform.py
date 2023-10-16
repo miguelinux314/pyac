@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Example AC that employs a static, uniform probability model with 8-bit symbols (0 to 255)
+"""Example AC that employs a static, uniform probability model with 3 symbols
 plus an additiona EOF symbol.
 """
 __author__ = "Miguel Hernández-Cabronero"
@@ -17,8 +17,8 @@ def main():
     parser.add_argument("output_path")
     options = parser.parse_args()
 
-    # Uniform distribution for 8-bit symbols plus a low-probability EOF symbol
-    uniform_probabilities = [1 / 256] * 256
+    # Uniform distribution for 3 symbols (0, 1, 2) plus a low-probability EOF symbol
+    uniform_probabilities = [1/3] * 3
     uniform_probabilities.append(2 ** -24)
     uniform_probabilities = [p / sum(uniform_probabilities) for p in uniform_probabilities]
 
